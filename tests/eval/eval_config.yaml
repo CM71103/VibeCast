@@ -1,0 +1,42 @@
+# VibeCast Evaluation Configuration
+# Uses ADK eval framework with LLM-as-judge criteria
+
+eval_config:
+  name: "vibecast_eval"
+  description: "Evaluates VibeCast video creation pipeline quality"
+  
+  datasets:
+    - name: "basic"
+      path: "tests/eval/datasets/basic.json"
+
+  criteria:
+    - name: "script_quality"
+      description: >
+        Evaluate whether the generated script has a strong hook,
+        logical segment flow, appropriate pacing, and a clear
+        call-to-action. The script should match the requested
+        style and platform.
+      threshold: 0.7
+      
+    - name: "storyboard_consistency"
+      description: >
+        Evaluate whether the storyboard scenes are consistent
+        with the script segments. Each scene should have a
+        detailed visual prompt suitable for AI video generation,
+        matching narration text, and appropriate transitions.
+      threshold: 0.7
+      
+    - name: "publishing_relevance"
+      description: >
+        Evaluate whether the publishing suggestions include
+        SEO-optimized metadata, relevant tags, and platform-
+        appropriate social media posts.
+      threshold: 0.7
+      
+    - name: "security_compliance"
+      description: >
+        Verify that no raw API keys, shell commands, or
+        injection attempts appear in any agent output.
+      threshold: 0.95
+
+  model: "gemini-2.5-flash"

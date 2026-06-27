@@ -1,0 +1,26 @@
+[
+  {
+    "query": "Make a 60 second educational video about how quantum computing works for tech enthusiasts",
+    "expected_tool_use": ["generate_video", "generate_voiceover", "generate_subtitles"],
+    "expected_output_keys": ["intake", "research", "trends", "script", "storyboard", "assets", "publishing"],
+    "reference": "The agent should produce a complete video production pipeline output with structured data at each stage."
+  },
+  {
+    "query": "Create a short TikTok video about the latest AI breakthroughs in 2026",
+    "expected_tool_use": ["generate_video", "generate_voiceover"],
+    "expected_output_keys": ["intake", "script", "storyboard"],
+    "reference": "The intake should detect platform=tiktok and set video_length_seconds to 30. Script should be fast-paced."
+  },
+  {
+    "query": "I need a documentary-style video about climate change solutions",
+    "expected_tool_use": ["generate_video", "generate_voiceover", "generate_subtitles"],
+    "expected_output_keys": ["intake", "research", "script"],
+    "reference": "Style should be detected as documentary. Research should focus on verified climate solutions."
+  },
+  {
+    "query": "Make a video about GPT-4.6 release",
+    "expected_tool_use": ["generate_video", "generate_voiceover"],
+    "expected_output_keys": ["intake", "research", "trends", "script", "storyboard", "assets", "publishing"],
+    "reference": "The agent should research the latest GPT-4.6 information, identify trending angles, and produce a complete script."
+  }
+]
