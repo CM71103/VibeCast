@@ -8,8 +8,16 @@
 
 """MCP server package for VibeCast media tools."""
 
-from app.mcp_server.kling_client import KlingClient
+from app.mcp_server.imagen_client import ImagenClient
 from app.mcp_server.media_tools_server import mcp_server
 from app.mcp_server.tts_client import GeminiTTSClient
+from app.mcp_server.veo_client import VeoClient
+from app.mcp_server.youtube_client import YouTubeClient
 
-__all__ = ["KlingClient", "GeminiTTSClient", "mcp_server"]
+__all__ = [
+    "GeminiTTSClient",
+    "ImagenClient",
+    "VeoClient",
+    "YouTubeClient",
+    "mcp_server",
+]

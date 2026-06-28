@@ -15,15 +15,17 @@
 """VibeCast security layer — input sanitisation, injection detection, and ADK callbacks."""
 
 from app.security.validators import (
-    sanitize_prompt,
-    validate_video_prompt,
-    validate_tts_text,
     before_tool_security_callback,
+    sanitize_prompt,
+    validate_thumbnail_prompt,
+    validate_tts_text,
+    validate_video_prompt,
 )
 
 __all__ = [
-    "sanitize_prompt",
-    "validate_video_prompt",
-    "validate_tts_text",
     "before_tool_security_callback",
+    "sanitize_prompt",
+    "validate_thumbnail_prompt",
+    "validate_tts_text",
+    "validate_video_prompt",
 ]

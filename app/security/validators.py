@@ -15,7 +15,7 @@
 """Security validators for VibeCast — Day 4 whitepaper, Pillar 4 (Application & Runtime).
 
 This module provides three layers of defence for user-supplied text that flows
-into generative-AI tools (Kling video, ElevenLabs TTS):
+into generative-AI tools (Google Veo video, Gemini TTS):
 
 1. **Sanitisation** — strips shell metacharacters and zero-width Unicode
    characters that could carry invisible payloads.
@@ -32,7 +32,7 @@ import logging
 import re
 from typing import Any
 
-from google.adk.agents.callback_context import CallbackContext
+from google.adk.agents.context import Context
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +41,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _DEFAULT_MAX_LENGTH: int = 2500
-"""Default maximum prompt length — matches the Kling AI character limit."""
+"""Default maximum prompt length for video prompts."""
 
 _TTS_MAX_LENGTH: int = 5000
 """Maximum text length accepted by the TTS pipeline."""
+
+_THUMBNAIL_MAX_LENGTH: int = 1000
+"""Maximum prompt length accepted by the thumbnail pipeline."""
 
 _SHELL_META_CHARS: re.Pattern[str] = re.compile(r"[;|&$`\\!{}<>]")
 """Characters that have special meaning in POSIX shells."""
@@ -104,7 +107,7 @@ def sanitize_prompt(text: str, *, max_length: int = _DEFAULT_MAX_LENGTH) -> str:
     Args:
         text: Raw user input.
         max_length: Upper bound on returned string length.  Defaults to
-            ``2500`` (Kling AI limit).
+            ``2500`` character limit.
 
     Returns:
         The cleaned, length-bounded string.
@@ -120,7 +123,7 @@ def validate_video_prompt(prompt: str) -> str:
     """Sanitise and validate a video-generation prompt.
 
     Args:
-        prompt: Raw prompt destined for the Kling AI video generator.
+        prompt: Raw prompt destined for the video generator.
 
     Returns:
         The sanitised prompt, guaranteed to be non-empty and at most
@@ -128,7 +131,7 @@ def validate_video_prompt(prompt: str) -> str:
 
     Raises:
         ValueError: If the prompt is empty after sanitisation or exceeds the
-            Kling character limit.
+            video character limit.
     """
     sanitized: str = sanitize_prompt(prompt, max_length=_DEFAULT_MAX_LENGTH)
 
@@ -140,8 +143,8 @@ def validate_video_prompt(prompt: str) -> str:
 
     if len(sanitized) > _DEFAULT_MAX_LENGTH:
         raise ValueError(
-            f"Video prompt exceeds the {_DEFAULT_MAX_LENGTH}-character Kling AI "
-            f"limit (got {len(sanitized)} characters)."
+            f"Video prompt exceeds the {_DEFAULT_MAX_LENGTH}-character limit "
+            f"(got {len(sanitized)} characters)."
         )
 
     return sanitized
@@ -170,6 +173,22 @@ def validate_tts_text(text: str) -> str:
     return sanitized
 
 
+def validate_thumbnail_prompt(prompt: str) -> str:
+    """Sanitise and validate a thumbnail-generation prompt."""
+    sanitized: str = sanitize_prompt(
+        prompt,
+        max_length=_THUMBNAIL_MAX_LENGTH,
+    )
+
+    if not sanitized:
+        raise ValueError(
+            "Thumbnail prompt is empty after sanitisation.  "
+            "Please provide meaningful descriptive text."
+        )
+
+    return sanitized
+
+
 def detect_injection(text: str) -> bool:
     """Return ``True`` if *text* matches any known injection pattern.
 
@@ -191,9 +210,9 @@ def detect_injection(text: str) -> bool:
 
 
 def before_tool_security_callback(
-    callback_context: CallbackContext,
-    tool_name: str,
+    tool: Any,
     args: dict[str, Any],
+    callback_context: Context,
 ) -> dict[str, Any] | None:
     """ADK ``before_tool_callback`` that gates tool execution on input safety.
 
@@ -210,19 +229,24 @@ def before_tool_security_callback(
     convention for aborting execution).
 
     Args:
+        tool: Tool object about to execute.
+        args: Keyword arguments that will be forwarded to the tool.
         callback_context: The ADK callback context (not used directly but
             required by the callback signature).
-        tool_name: Name of the tool about to execute.
-        args: Keyword arguments that will be forwarded to the tool.
 
     Returns:
         ``None`` to allow execution, or a ``dict`` containing an ``"error"``
         key to block it.
     """
+    tool_name = getattr(tool, "name", str(tool))
+
     # --- tool-specific validation ----------------------------------------
     try:
         if tool_name == "generate_video" and "prompt" in args:
             args["prompt"] = validate_video_prompt(args["prompt"])
+
+        if tool_name == "generate_thumbnail" and "prompt" in args:
+            args["prompt"] = validate_thumbnail_prompt(args["prompt"])
 
         if tool_name == "generate_voiceover" and "text" in args:
             args["text"] = validate_tts_text(args["text"])

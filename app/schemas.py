@@ -28,7 +28,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Node 1 — Intake
 # ---------------------------------------------------------------------------
@@ -204,7 +203,7 @@ class StoryboardScene(BaseModel):
     """A single visual scene in the storyboard.
 
     Each scene carries a generative-AI prompt for video synthesis (e.g.
-    Kling AI) and the matching narration text for TTS rendering.
+    Google Veo) and the matching narration text for TTS rendering.
     """
 
     scene_number: int = Field(
@@ -214,7 +213,7 @@ class StoryboardScene(BaseModel):
     )
     visual_prompt: str = Field(
         ...,
-        description="Prompt sent to the video generation model (e.g. Kling AI).",
+        description="Prompt sent to the video generation model (e.g. Google Veo).",
     )
     narration_text: str = Field(
         ...,
@@ -257,7 +256,7 @@ class Storyboard(BaseModel):
 class GeneratedAssets(BaseModel):
     """Manifest of all media assets produced for the video.
 
-    Produced by the **Asset Generation** node, which orchestrates Kling AI
+    Produced by the **Asset Generation** node, which orchestrates Google Veo
     video synthesis, TTS voiceover rendering, and SRT subtitle creation.
     """
 
@@ -279,9 +278,55 @@ class GeneratedAssets(BaseModel):
         default="",
         description="Full SRT-formatted subtitle content for the video.",
     )
+    thumbnail: dict[str, object] = Field(
+        default_factory=dict,
+        description="Generated thumbnail image metadata.",
+    )
     asset_manifest: dict[str, object] = Field(
         default_factory=dict,
         description="Summary manifest mapping asset types to counts and paths.",
+    )
+
+
+class ThumbnailResult(BaseModel):
+    """Generated thumbnail image for the video."""
+
+    image_url: str = Field(
+        default="",
+        description="Path or URL to the generated thumbnail image.",
+    )
+    prompt_used: str = Field(
+        default="",
+        description="Sanitised Imagen prompt used for thumbnail generation.",
+    )
+    status: Literal["success", "error"] = Field(
+        ...,
+        description="Thumbnail generation status.",
+    )
+
+
+class YouTubeUploadResult(BaseModel):
+    """Result of auto-uploading to YouTube."""
+
+    video_id: str = Field(
+        default="",
+        description="YouTube video ID when an upload succeeds.",
+    )
+    video_url: str = Field(
+        default="",
+        description="Full YouTube URL when an upload succeeds.",
+    )
+    status: Literal["success", "error", "skipped"] = Field(
+        ...,
+        description="Upload status.",
+    )
+    privacy_status: Literal["private", "unlisted", "public"] = Field(
+        default="private",
+        description="YouTube privacy setting used for upload.",
+    )
+    message: str = Field(
+        default="",
+        description="Human-readable upload status message.",
     )
 
 

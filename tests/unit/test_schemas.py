@@ -20,7 +20,8 @@ from app.schemas import (
     ScriptSegment,
     Storyboard,
     StoryboardScene,
-    TrendAnalysis,
+    ThumbnailResult,
+    YouTubeUploadResult,
 )
 
 
@@ -149,10 +150,33 @@ class TestGeneratedAssets:
                  "status": "success"},
             ],
             subtitle_srt="1\n00:00:00,000 --> 00:00:05,000\nHello\n",
+            thumbnail={
+                "image_url": "https://mock.url/thumb.png",
+                "status": "success",
+            },
             asset_manifest={"total_scenes": 1, "videos_generated": 1},
         )
         assert len(assets.video_clips) == 1
+        assert assets.thumbnail["status"] == "success"
         assert assets.asset_manifest["videos_generated"] == 1
+
+    def test_valid_thumbnail_result(self):
+        thumbnail = ThumbnailResult(
+            image_url="https://mock.url/thumb.png",
+            prompt_used="Bold cinematic thumbnail",
+            status="success",
+        )
+        assert thumbnail.status == "success"
+
+    def test_valid_youtube_upload_result(self):
+        upload = YouTubeUploadResult(
+            video_id="abc123",
+            video_url="https://youtu.be/abc123",
+            status="success",
+            privacy_status="private",
+            message="Uploaded",
+        )
+        assert upload.privacy_status == "private"
 
 
 class TestPublishingSuggestions:

@@ -58,7 +58,7 @@ Speak directly to the viewer's pain point or desire.
 
 ## Visual Direction Guidelines
 
-### Camera Prompts for Kling AI
+### Camera Prompts for Veo
 When writing visual prompts for AI video generation:
 - **Be specific**: "Close-up of hands typing on a keyboard with
   blue LED backlighting" not "someone typing"

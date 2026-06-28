@@ -18,10 +18,10 @@ RUN apt-get update && \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Copy dependency files first for layer caching
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies
-RUN uv sync --no-dev --no-editable
+# Install Python dependencies (frozen for reproducible builds)
+RUN uv sync --frozen --no-dev --no-editable
 
 # Copy application code
 COPY app/ ./app/
@@ -33,6 +33,7 @@ USER vibecast
 # Cloud Run uses PORT env var (default 8080)
 ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
+ENV GOOGLE_GENAI_USE_VERTEXAI=False
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

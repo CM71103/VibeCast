@@ -5,12 +5,6 @@
 # You may obtain a copy of the License at
 #
 #     https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
 """FastAPI application wrapper for VibeCast ADK agent.
 
@@ -25,14 +19,11 @@ import logging
 import os
 
 from dotenv import load_dotenv
-
-# Load environment variables before any ADK imports
-load_dotenv()
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.agent import app as adk_app
+# Load environment variables for health/info endpoints and local deployment.
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -71,17 +62,23 @@ async def service_info():
         "version": "0.1.0",
         "description": "AI-powered video creation agent",
         "workflow_nodes": [
+            "vibecast_orchestrator",
             "intake_agent",
             "researcher",
             "trend_analyst",
             "scriptwriter_agent",
+            "production_coordinator",
+            "production_pipeline_agent",
             "storyboard_agent",
             "asset_generator",
             "publishing_advisor",
+            "auto_publisher",
         ],
         "mcp_tools": [
             "generate_video",
             "generate_voiceover",
+            "generate_thumbnail",
             "generate_subtitles",
+            "upload_to_youtube",
         ],
     }
