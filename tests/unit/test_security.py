@@ -176,6 +176,6 @@ class TestBeforeToolSecurityCallback:
             name = "generate_thumbnail"
 
         args = {"prompt": "  thumbnail | with unsafe char  "}
-        result = before_tool_security_callback(Tool(), args, None)
+        result = before_tool_security_callback(Tool(), args)
         assert result is None
         assert "|" not in args["prompt"]

@@ -63,10 +63,9 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
 # Model configuration
 # Free tier quotas (as of 2026):
-#   gemini-2.5-flash:   20 req/day
-#   gemini-2.0-flash:  1500 req/day
-#   gemini-1.5-flash:  1500 req/day
-MODEL_NAME = os.environ.get("VIBECAST_MODEL", "gemini-2.0-flash-001")
+#   gemini-3-flash:   20 req/day (AI Studio free tier)
+#   gemini-3.5-flash:  20 req/day (AI Studio free tier)
+MODEL_NAME = os.environ.get("VIBECAST_MODEL", "gemini-3-flash-preview")
 MODEL = Gemini(
     model=MODEL_NAME,
     retry_options=types.HttpRetryOptions(attempts=3),
@@ -245,7 +244,7 @@ async def asset_generator(ctx: Context, node_input: Any) -> Event:
     the sole egress point to external APIs (Day 4, Pillar 4).
     """
     # Read storyboard from state
-    storyboard_data = ctx.state.get("storyboard", {})
+    storyboard_data = _state_to_dict(ctx.state.get("storyboard", {}))
     scenes = storyboard_data.get("scenes", [])[:MAX_SCENES_LIMIT]
 
     if not scenes:
@@ -435,11 +434,28 @@ async def auto_publisher(ctx: Context, node_input: Any) -> Event:
 
 
 def _state_to_dict(value: Any) -> dict[str, Any]:
-    """Normalise ADK state values from Pydantic models or plain dicts."""
+    """Normalise ADK state values from Pydantic models, plain dicts, or JSON strings."""
+    if not value:
+        return {}
     if isinstance(value, dict):
         return value
     if hasattr(value, "model_dump"):
         return value.model_dump()
+    if isinstance(value, str):
+        import json
+        cleaned = value.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        elif cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+        try:
+            return json.loads(cleaned)
+        except Exception as e:
+            logger.error("Failed to parse state string as JSON: %s. Value: %r", e, value)
+            return {}
     return {}
 
 

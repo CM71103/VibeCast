@@ -32,8 +32,6 @@ import logging
 import re
 from typing import Any
 
-from google.adk.agents.context import Context
-
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -212,7 +210,7 @@ def detect_injection(text: str) -> bool:
 def before_tool_security_callback(
     tool: Any,
     args: dict[str, Any],
-    callback_context: Context,
+    **kwargs: Any,
 ) -> dict[str, Any] | None:
     """ADK ``before_tool_callback`` that gates tool execution on input safety.
 
@@ -231,8 +229,9 @@ def before_tool_security_callback(
     Args:
         tool: Tool object about to execute.
         args: Keyword arguments that will be forwarded to the tool.
-        callback_context: The ADK callback context (not used directly but
-            required by the callback signature).
+        **kwargs: Additional keyword arguments passed by the ADK framework
+            (e.g. ``tool_context``). Accepted via **kwargs for forward
+            compatibility.
 
     Returns:
         ``None`` to allow execution, or a ``dict`` containing an ``"error"``
