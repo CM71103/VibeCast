@@ -3,7 +3,7 @@
 > **Kaggle AI Agents Capstone Project — Freestyle Track**  
 > Built with Google Agent Development Kit (ADK) 2.0
 
-VibeCast is a conversational AI video creation agent that turns a creator's topic into a reviewed script, search-grounded research, production-ready storyboard, generated media assets, publishing metadata, and a private YouTube upload path — all with human-in-the-loop approvals.
+VibeCast is a conversational AI video creation agent that turns a creator's topic into a reviewed script, search-grounded research, production-ready storyboard, generated media assets, publishing metadata, and a private YouTube upload path — all with **stateful Human-in-the-Loop (HITL) approval gates**.
 
 ---
 
@@ -11,7 +11,7 @@ VibeCast is a conversational AI video creation agent that turns a creator's topi
 
 Creating high-quality video content requires multiple specialized skills: research, scriptwriting, visual direction, video generation, voiceover, thumbnail design, SEO optimization, and publishing. Most creators lack the time, tools, or expertise to do all of this well.
 
-**VibeCast solves this by orchestrating a multi-agent pipeline** that handles the entire workflow through natural conversation, while keeping the creator in control at every critical decision point.
+**VibeCast solves this by orchestrating a multi-agent pipeline** that handles the entire workflow through natural conversation, while keeping the creator in control at every critical decision point via **formal ADK RequestInput gates** that suspend workflow state until human approval.
 
 ---
 
@@ -27,7 +27,8 @@ graph TD
     O --> S[Scriptwriter]
     O --> PC[Production Coordinator]
     PC --> P[Production Pipeline<br/>Workflow]
-    P --> SB[Storyboard Agent]
+    P --> HITL[Script Review Gate<br/>HITL RequestInput]
+    HITL -->|Approved| SB[Storyboard Agent]
     SB --> AG[Asset Generator]
     AG --> V[Veo Video]
     AG --> A[Gemini TTS]
@@ -41,11 +42,38 @@ graph TD
 
 | Course Day | Theme | VibeCast Implementation |
 |------------|-------|-------------------------|
-| **Day 1** | Agentic Engineering | Conversational `LlmAgent` orchestrator with human-in-the-loop review before production |
+| **Day 1** | Agentic Engineering | Conversational `LlmAgent` orchestrator with **stateful HITL review gate** (`script_review_gate` using `RequestInput`) |
 | **Day 2** | Tools & Interoperability | FastMCP media tools server for Veo, Gemini TTS, Imagen, subtitles, YouTube |
 | **Day 3** | Agent Skills | `app/skills/video_production/SKILL.md` — cinematic scriptwriting guidelines |
 | **Day 4** | Security & Evaluation | Prompt sanitization, injection detection, ADK `before_tool_callback`, unit tests |
-| **Day 5** | Production Readiness | Docker, FastAPI health endpoints, config via `.env`, mock mode for demos |
+| **Day 5** | Production Readiness | ADK web UI, config via `.env`, mock mode for demos, `run.py` scripted demo |
+
+---
+
+## 🔒 Human-in-the-Loop Architecture (HITL)
+
+VibeCast implements **formal workflow suspension** using ADK's `RequestInput` mechanism — the same pattern recommended for enterprise-grade agent systems:
+
+```mermaid
+graph LR
+    Script[Script Generated] --> Gate[script_review_gate]
+    Gate -->|Yields RequestInput| Suspend[Workflow State Suspended]
+    Suspend -->|Human submits approval| Resume[Workflow Resumes]
+    Resume --> Storyboard[Continue to Production]
+```
+
+**How it works:**
+1. The `script_review_gate` function node reads the generated script from workflow state
+2. It yields an ADK `RequestInput` event with ID `script_approval`
+3. The **workflow state is formally suspended** — the entire pipeline halts
+4. When the human responds (approve/revise), the workflow resumes exactly where it left off
+5. This is identical to the `escalation_review` pattern used in enterprise triage systems
+
+**Why this matters:**
+- The workflow can be paused for hours/days while waiting for human review
+- State is preserved across the suspension — no data loss
+- The approval decision is formally tracked in workflow state
+- Compatible with database-backed session persistence for production deployments
 
 ---
 
@@ -58,12 +86,14 @@ The orchestrator asks for missing brief details: **platform**, **target audience
 - **Researcher** uses `google_search` for grounded facts & sources
 - **Trend Analyst** uses `google_search` for SEO keywords, hook styles, competitor angles, engagement prediction
 
-### Phase 3 — Script Review (Human-in-the-Loop)
+### Phase 3 — Script Review (Human-in-the-Loop Gate)
 - **Scriptwriter** drafts the script (hook, segments, CTA)
-- Orchestrator presents: **title, hook, segment plan, CTA** → asks for **approval/revision**
+- The **HITL gate** (`script_review_gate`) formally suspends the workflow using ADK `RequestInput`
+- Human reviews: **title, hook, segment plan, CTA** → submits **approval or revision**
+- Workflow state preserved across the suspension
 
 ### Phase 4 — Production (Deterministic Pipeline)
-After explicit approval, the `Workflow` executes:
+After explicit approval via the HITL gate, the `Workflow` executes:
 1. **Storyboard Agent** → visual prompts per scene
 2. **Asset Generator** → Veo video, Gemini TTS voiceover, Imagen thumbnail, SRT subtitles
 3. **Publishing Advisor** → title, description, tags, hashtags, social posts, best upload time
@@ -134,37 +164,11 @@ YOUTUBE_ENABLED=false
 
 ---
 
-## 🐳 Production Deployment (Cloud Run)
-
-### Docker Build
-```bash
-docker build -t gcr.io/PROJECT_ID/vibecast .
-docker push gcr.io/PROJECT_ID/vibecast
-```
-
-### Deploy to Cloud Run
-```bash
-gcloud run deploy vibecast \
-  --image gcr.io/PROJECT_ID/vibecast \
-  --region us-central1 \
-  --platform managed \
-  --allow-unauthenticated \
-  --set-env-vars="GEMINI_API_KEY=your-key,VIBECAST_MOCK_MODE=false,YOUTUBE_ENABLED=true,YOUTUBE_CLIENT_SECRET_PATH=/secrets/client_secret.json,YOUTUBE_PRIVACY_STATUS=private"
-```
-
-### Health Check
-```bash
-curl https://your-service-url/health
-# {"status": "healthy", "service": "vibecast", "mock_mode": "false"}
-```
-
----
-
 ## 🔐 Security Features (Day 4)
 
 | Layer | Implementation |
 |-------|----------------|
-| **Input Sanitization** | Strips shell metacharacters (`;|&$`\`!{}<>), zero-width Unicode (U+200B, U+FEFF, etc.), enforces length limits |
+| **Input Sanitization** | Strips shell metacharacters (`;|&$`\`!{}<>`), zero-width Unicode (U+200B, U+FEFF, etc.), enforces length limits |
 | **Injection Detection** | Regex patterns for: "ignore previous instructions", "system prompt", "you are now", "forget everything", shell commands (`rm -rf`, `sudo`, `wget`, `curl`) |
 | **ADK Callback** | `before_tool_security_callback` validates *every* tool call — blocks execution on violation |
 | **MCP as Sole Egress** | Agents cannot make raw HTTP calls; all external API traffic flows through the FastMCP server |
@@ -178,9 +182,9 @@ curl https://your-service-url/health
 ```
 vibecast-kaggle/
 ├── app/
-│   ├── agent.py                    # Conversational orchestrator + production Workflow
+│   ├── agent.py                    # Conversational orchestrator + HITL gate + production Workflow
 │   ├── schemas.py                  # Pydantic v2 models for all pipeline nodes
-│   ├── fast_api_app.py             # Cloud Run HTTP wrapper (/health, /info)
+│   ├── fast_api_app.py             # HTTP wrapper (/health, /info)
 │   ├── tools.py                    # Function tools (web_search)
 │   ├── security/
 │   │   └── validators.py           # Sanitization, injection detection, ADK callback
@@ -204,9 +208,8 @@ vibecast-kaggle/
 │   ├── Day_1_v3.pdf ... Day_5_v3.pdf   # Course whitepapers (reference)
 │   └── instructions.txt            # Capstone requirements
 ├── .env.example                    # Environment template
-├── Dockerfile                      # Multi-stage Cloud Run build
 ├── pyproject.toml                  # Dependencies, ruff, pytest config
-├── agents-cli-manifest.yaml        # ADK CLI deployment config
+├── agents-cli-manifest.yaml        # ADK CLI config
 └── run.py                          # Scripted demo runner
 ```
 
@@ -219,7 +222,7 @@ vibecast-kaggle/
 | Unit tests | `uv run pytest tests/unit/ -q` | `36 passed` |
 | Lint | `uv run ruff check app tests` | `All checks passed` |
 | Compile | `uv run python -m compileall app tests` | No errors |
-| Health endpoint | `curl localhost:8080/health` | `{"status": "healthy", ...}` |
+| ADK Web UI | `uv run adk web` | Agent tree visible |
 
 ---
 
@@ -249,11 +252,11 @@ See the [Kaggle Writeup](https://www.kaggle.com/competitions/vibecoding-agents-c
 
 | Requirement | Status | Location |
 |-------------|--------|----------|
-| **ADK Multi-Agent System** | ✅ | `app/agent.py` — 7 LlmAgents + Workflow |
+| **ADK Multi-Agent System** | ✅ | `app/agent.py` — 7 LlmAgents + Workflow + HITL gate |
 | **MCP Server** | ✅ | `app/mcp_server/media_tools_server.py` — 5 tools |
 | **Antigravity** | ✅ | Video demo shows agent autonomy |
 | **Security Features** | ✅ | `app/security/validators.py` — 3-layer defense |
-| **Deployability** | ✅ | Dockerfile, FastAPI, Cloud Run ready |
+| **Human-in-the-Loop** | ✅ | `script_review_gate` — formal `RequestInput` suspension |
 | **Agent Skills (Agents CLI)** | ✅ | `app/skills/video_production/SKILL.md` |
 | **≥3 Key Concepts Demonstrated** | ✅ | All 6 covered |
 

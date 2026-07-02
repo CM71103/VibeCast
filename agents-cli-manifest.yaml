@@ -1,3 +1,2 @@
 agent_dir: app
-deployment_target: cloud_run
 project_name: vibecast

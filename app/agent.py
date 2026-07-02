@@ -47,6 +47,7 @@ from google.adk.apps import App
 from google.adk.events.event import Event
 from google.adk.events.event_actions import EventActions
 from google.adk.models import Gemini
+from google.adk.tools import request_input
 from google.adk.workflow import Workflow
 from google.genai import types
 
@@ -496,6 +497,37 @@ publishing_advisor = LlmAgent(
 
 
 # ===========================================================================
+# HITL Gate — Formal script review using ADK request_input (Day 1 pattern)
+# ===========================================================================
+script_review_agent = LlmAgent(
+    name="script_review_agent",
+    model=MODEL,
+    tools=[request_input],
+    instruction=(
+        "You are the script review gatekeeper for VibeCast.\n\n"
+        "Your ONLY job is to present the script to the user and get their "
+        "approval before production begins.\n\n"
+        "1. Read the script from state: {script}\n"
+        "2. Present a clear summary: title, hook, segment count, CTA\n"
+        "3. Call the adk_request_input tool with a message asking the user "
+        "to approve or request changes\n"
+        "4. If the user approves, say 'Script approved! Proceeding to production.' "
+        "and transfer to production_pipeline_agent\n"
+        "5. If the user requests changes, note the feedback and transfer "
+        "back to the orchestrator\n\n"
+        "CRITICAL: You MUST call adk_request_input to formally pause the "
+        "workflow and wait for human approval. This creates a formal "
+        "suspension point in the workflow state."
+    ),
+    output_key="script_review_decision",
+    description=(
+        "Human-in-the-Loop gate that formally suspends the workflow "
+        "using ADK request_input until the user approves the script."
+    ),
+)
+
+
+# ===========================================================================
 # Production Workflow — Deterministic pipeline after script approval
 # ===========================================================================
 production_pipeline = Workflow(
@@ -547,21 +579,23 @@ production_pipeline_agent = ProductionPipelineAgent(
 production_coordinator = LlmAgent(
     name="production_coordinator",
     model=MODEL,
-    sub_agents=[production_pipeline_agent],
+    sub_agents=[script_review_agent, production_pipeline_agent],
     instruction=(
-        "You coordinate Phase 4 production for VibeCast after the user "
-        "approves a script.\n\n"
-        "Tell the user: 'Starting production! This will generate:\n"
+        "You coordinate Phase 4 production for VibeCast.\n\n"
+        "When the user is ready for production:\n"
+        "1. First, transfer to 'script_review_agent' for formal HITL approval\n"
+        "2. Once the script is approved, transfer to "
+        "'production_pipeline_agent' to execute the deterministic pipeline\n\n"
+        "The pipeline generates:\n"
         "* Storyboard from the approved script\n"
         "* Video clip via Google Veo\n"
         "* Voiceover via Gemini TTS\n"
         "* Thumbnail via Google Imagen\n"
         "* SRT subtitles\n"
         "* Publishing metadata (title, description, tags, hashtags)\n"
-        "* Private YouTube upload'\n\n"
-        "Then transfer to 'production_pipeline_agent' to execute the pipeline."
+        "* Private YouTube upload"
     ),
-    description="Coordinates and launches deterministic production after script approval.",
+    description="Coordinates HITL script review and deterministic production.",
 )
 
 root_agent = LlmAgent(
@@ -585,21 +619,24 @@ root_agent = LlmAgent(
         "- Transfer to researcher for search-grounded facts and sources.\n"
         "- Transfer to trend_analyst for search-grounded hooks, keywords, "
         "and competitor angles.\n\n"
-        "PHASE 3 - SCRIPT REVIEW:\n"
+        "PHASE 3 - SCRIPT REVIEW (Human-in-the-Loop):\n"
         "- Transfer to scriptwriter_agent for the script.\n"
-        "- Present the title, hook, segment plan, CTA, and ask for approval.\n"
+        "- Present the title, hook, segment plan, CTA to the user.\n"
+        "- The production pipeline includes a formal HITL gate "
+        "(script_review_gate) that suspends the workflow state using "
+        "ADK RequestInput until the user explicitly approves.\n"
         "- If the user requests changes, transfer back to scriptwriter_agent "
         "with the feedback.\n\n"
-        "PHASE 4 - PRODUCTION:\n"
-        "- After explicit approval, transfer to production_coordinator.\n"
-        "- Explain that the deterministic production_pipeline generates "
-        "storyboard, Veo video, Gemini TTS, Imagen thumbnail, subtitles, "
-        "publishing metadata, and a private YouTube upload.\n\n"
+        "PHASE 4 - PRODUCTION (Deterministic Pipeline):\n"
+        "- After the user signals readiness, transfer to production_coordinator.\n"
+        "- The pipeline will formally request approval via the HITL gate, "
+        "then execute: storyboard → Veo video → Gemini TTS → Imagen thumbnail "
+        "→ subtitles → publishing metadata → private YouTube upload.\n\n"
         "Be clear, practical, and demo-ready. Keep the user in the loop and "
         "surface approvals before expensive generation steps."
     ),
     description=(
-        "Conversational VibeCast orchestrator with human-in-the-loop review."
+        "Conversational VibeCast orchestrator with stateful HITL review gates."
     ),
 )
 
@@ -609,5 +646,5 @@ root_agent = LlmAgent(
 # ===========================================================================
 app = App(
     root_agent=root_agent,
-    name="app",
+    name="vibecast",
 )

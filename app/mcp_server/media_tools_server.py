@@ -192,9 +192,9 @@ async def generate_voiceover(
         )
         return {
             "status": "success",
-            "audio_url": result["audio_url"],
-            "audio_data": result["audio_data"],
-            "mime_type": result["mime_type"],
+            "audio_url": result.get("audio_url", ""),
+            "audio_data": result.get("audio_data", ""),
+            "mime_type": result.get("mime_type", "audio/mp3"),
         }
 
     except ValueError as e:

@@ -7,3 +7,8 @@
 #     https://www.apache.org/licenses/LICENSE-2.0
 
 """VibeCast — AI Video Creation Agent."""
+
+from app.agent import app as vibecast_app
+from app.agent import root_agent
+
+__all__ = ["root_agent", "vibecast_app"]
