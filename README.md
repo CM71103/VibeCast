@@ -123,7 +123,7 @@ uv sync --dev
 cp .env.example .env
 # Edit .env and add your GEMINI_API_KEY
 
-# Run unit tests (36 tests)
+# Run unit tests (39 tests)
 uv run pytest tests/unit/ -q
 
 # Lint check
@@ -132,15 +132,24 @@ uv run ruff check app tests
 
 ### Run the Agent (Interactive Web UI)
 ```bash
-# Starts ADK web server at http://localhost:8080
+# Starts ADK web server at http://localhost:8000
 uv run adk web
 ```
 
-### Run Demo (Scripted Conversation)
+### Run the Agent as a REST API (FastAPI Backend)
+In addition to the standard ADK web interface, VibeCast exposes a production-ready FastAPI backend server that allows you to integrate the agent pipeline into any custom frontend:
+
 ```bash
-# Requires valid GEMINI_API_KEY in .env
-uv run python run.py
+# Starts the FastAPI server
+uv run uvicorn app.fast_api_app:app --host 127.0.0.1 --port 8000
 ```
+
+#### API Endpoints:
+- `GET /health` — Check server health.
+- `GET /info` — Get configuration metadata (model, YouTube upload status).
+- `POST /chat` — Send a message to the agent orchestrator and run the pipeline.
+  - **Request Body**: `{"session_id": "optional-uuid", "message": "user prompt"}`
+  - **Response**: Returns the agent's message and the complete current session workflow state.
 
 ---
 
@@ -219,7 +228,7 @@ vibecast-kaggle/
 
 | Check | Command | Expected |
 |-------|---------|----------|
-| Unit tests | `uv run pytest tests/unit/ -q` | `36 passed` |
+| Unit tests | `uv run pytest tests/unit/ -q` | `39 passed` |
 | Lint | `uv run ruff check app tests` | `All checks passed` |
 | Compile | `uv run python -m compileall app tests` | No errors |
 | ADK Web UI | `uv run adk web` | Agent tree visible |
