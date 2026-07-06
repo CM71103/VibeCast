@@ -59,18 +59,34 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Environment setup for Gemini Developer API (AI Studio)
 # Force False so the Gemini client uses API key auth, not Vertex AI.
+# Gemini API key is still used for Veo, TTS, and Imagen media tools.
 # ---------------------------------------------------------------------------
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
 
-# Model configuration
-# Free tier quotas (as of 2026):
-#   gemini-3-flash:   20 req/day (AI Studio free tier)
-#   gemini-3.5-flash:  20 req/day (AI Studio free tier)
+# ---------------------------------------------------------------------------
+# Model configuration — supports Gemini (native) or any LiteLlm provider
+# ---------------------------------------------------------------------------
+# Set VIBECAST_MODEL to:
+#   "gemini-3-flash-preview"      → uses native Gemini API
+#   "openai/claude-haiku-4.5"     → uses LiteLlm via OpenAI-compatible router
+#   "anthropic/claude-haiku-4.5"  → uses LiteLlm via Anthropic
+# For OpenAI-compatible routers, also set OPENAI_API_KEY and OPENAI_API_BASE.
 MODEL_NAME = os.environ.get("VIBECAST_MODEL", "gemini-3-flash-preview")
-MODEL = Gemini(
-    model=MODEL_NAME,
-    retry_options=types.HttpRetryOptions(attempts=3),
-)
+
+if MODEL_NAME.startswith(("openai/", "anthropic/", "azure/", "groq/", "ollama/")):
+    from google.adk.models import LiteLlm
+    import litellm
+    # Auto-strip unsupported params (e.g. images on text-only models)
+    litellm.drop_params = True
+    litellm.modify_params = True
+    MODEL = LiteLlm(model=MODEL_NAME)
+    logger.info("Using LiteLlm model: %s", MODEL_NAME)
+else:
+    MODEL = Gemini(
+        model=MODEL_NAME,
+        retry_options=types.HttpRetryOptions(attempts=3),
+    )
+    logger.info("Using Gemini model: %s", MODEL_NAME)
 
 # Scene generation limit to prevent exceeding credit quotas
 MAX_SCENES_LIMIT = int(os.environ.get("VIBECAST_MAX_SCENES_LIMIT", "1"))
@@ -98,6 +114,7 @@ intake_agent = LlmAgent(
         "- Always produce a complete JSON object — no markdown, no explanation."
     ),
     output_key="intake",
+    mode="single_turn",
     description="Parses user video requests into structured briefs.",
 )
 
@@ -115,7 +132,7 @@ researcher = LlmAgent(
     instruction=(
         "You are a research specialist for video content creation. "
         "Use the web_search tool to find current, verifiable information "
-        "about the video brief stored in state as 'intake': {intake}.\n\n"
+        "about the video brief: {intake?}.\n\n"
         "Your tasks:\n"
         "1. Identify 5-8 key facts about the topic that would be "
         "interesting for the target audience\n"
@@ -129,6 +146,7 @@ researcher = LlmAgent(
         "sources (list of str), trending_angles (list of str)."
     ),
     output_key="research",
+    mode="single_turn",
     description="Researches topics for video content using web search.",
 )
 
@@ -146,8 +164,8 @@ trend_analyst = LlmAgent(
     instruction=(
         "You are a social media trend analyst specializing in video "
         "content optimization. Use the web_search tool to ground your "
-        "trend analysis. Given the research data: {research} "
-        "and the video brief: {intake}.\n\n"
+        "trend analysis. Read the research data: {research?} "
+        "and the video brief: {intake?}.\n\n"
         "Your tasks:\n"
         "1. Identify 8-12 SEO-friendly keywords for this topic\n"
         "2. Suggest 3-5 effective hook styles that are trending\n"
@@ -162,6 +180,7 @@ trend_analyst = LlmAgent(
         "engagement_potential (str)."
     ),
     output_key="trends",
+    mode="single_turn",
     description="Analyzes content trends for video optimization.",
 )
 
@@ -174,9 +193,9 @@ scriptwriter_agent = LlmAgent(
     name="scriptwriter_agent",
     model=MODEL,
     instruction=(
-        f"You are an expert video scriptwriter. Using the research "
-        f"data: {{research}}, trend analysis: {{trends}}, and video "
-        f"brief: {{intake}}, write a compelling video script.\n\n"
+        f"You are an expert video scriptwriter. Read the research data: "
+        f"{{research?}}, trend analysis: {{trends?}}, and video brief: "
+        f"{{intake?}} to write a compelling video script.\n\n"
         f"Script requirements:\n"
         f"1. HOOK: Start with an attention-grabbing opening (first 5 "
         f"seconds are critical for retention)\n"
@@ -190,11 +209,12 @@ scriptwriter_agent = LlmAgent(
         f"cta (str), total_duration_seconds (int)\n\n"
         f"- Use conversational, energetic language\n"
         f"- Each segment should be 5-15 seconds\n"
-        f"- Total duration should match the brief: {{intake}}\n"
-        f"- The hook should use one of these trending styles: {{trends}}\n"
+        f"- Total duration should match the brief duration\n"
+        f"- The hook should use one of the trending styles identified in the trend analysis\n"
         f"- No markdown, no explanation — pure JSON only."
     ),
     output_key="script",
+    mode="single_turn",
     description="Creates engaging video scripts with hooks and CTAs.",
 )
 
@@ -207,8 +227,8 @@ storyboard_agent = LlmAgent(
     name="storyboard_agent",
     model=MODEL,
     instruction=(
-        f"You are a visual storyboard director. Convert the video "
-        f"script: {{script}} into a detailed storyboard.\n\n"
+        f"You are a visual storyboard director. Read the video script: "
+        f"{{script?}} and convert it into a detailed storyboard.\n\n"
         f"CRITICAL: Generate EXACTLY {MAX_SCENES_LIMIT} scene(s) to conserve generation credits.\n\n"
         f"Reply with a JSON object with one key 'scenes' containing a list. "
         f"Each scene object must have:\n"
@@ -281,6 +301,10 @@ async def asset_generator(ctx: Context, node_input: Any) -> Event:
     voiceover_clips = []
     subtitle_segments = []
 
+    intake_data = _state_to_dict(ctx.state.get("intake", {}))
+    platform = intake_data.get("platform", "general").lower()
+    aspect_ratio = "9:16" if platform in ("instagram", "tiktok") else "16:9"
+
     for i, scene in enumerate(scenes):
         scene_num = scene.get("scene_number", 0)
         visual_prompt = scene.get("visual_prompt", "")
@@ -295,7 +319,10 @@ async def asset_generator(ctx: Context, node_input: Any) -> Event:
         try:
             clean_prompt = validate_video_prompt(visual_prompt)
             video_url = await veo_client.generate_video(
-                prompt=clean_prompt, duration=min(duration, 10)
+                prompt=clean_prompt,
+                duration=min(duration, 10),
+                aspect_ratio=aspect_ratio,
+                narration=narration,
             )
             video_clips.append({
                 "scene_number": scene_num,
@@ -350,9 +377,8 @@ async def asset_generator(ctx: Context, node_input: Any) -> Event:
 
     srt_content = "\n".join(srt_lines)
 
-    publishing_data = _state_to_dict(ctx.state.get("publishing", {}))
     script_data = _state_to_dict(ctx.state.get("script", {}))
-    thumbnail_prompt = publishing_data.get("thumbnail_concept") or (
+    thumbnail_prompt = (
         f"YouTube thumbnail for '{script_data.get('title', 'VibeCast video')}'. "
         "Bold, high-contrast, cinematic, readable at small size, no small text."
     )
@@ -399,13 +425,16 @@ async def asset_generator(ctx: Context, node_input: Any) -> Event:
 async def auto_publisher(ctx: Context, node_input: Any) -> Event:
     """Upload the generated video to YouTube after metadata is ready."""
     from app.mcp_server.youtube_client import YouTubeClient
+    from app.mcp_server.veo_client import VeoClient
 
     assets = _state_to_dict(ctx.state.get("assets", {}))
     publishing = _state_to_dict(ctx.state.get("publishing", {}))
     video_clips = assets.get("video_clips", [])
-    first_video = video_clips[0].get("video_url", "") if video_clips else ""
+    
+    # Extract all successfully generated scene video URLs
+    video_urls = [v.get("video_url", "") for v in video_clips if v.get("status") == "success" and v.get("video_url")]
 
-    if not first_video:
+    if not video_urls:
         result = {
             "video_id": "",
             "video_url": "",
@@ -418,16 +447,30 @@ async def auto_publisher(ctx: Context, node_input: Any) -> Event:
             actions=EventActions(state_delta={"upload_result": result}),
         )
 
+    # Determine aspect ratio based on platform
+    intake_data = _state_to_dict(ctx.state.get("intake", {}))
+    platform = intake_data.get("platform", "general").lower()
+    aspect_ratio = "9:16" if platform in ("instagram", "tiktok") else "16:9"
+
+    # Stitch the clips into a single video
+    veo_client = VeoClient()
+    try:
+        final_video_url = await veo_client.stitch_videos(video_urls, aspect_ratio=aspect_ratio)
+    except Exception as e:
+        logger.error("Video stitching failed: %s. Falling back to first clip.", e)
+        final_video_url = video_urls[0]
+
     thumbnail = _state_to_dict(assets.get("thumbnail", {}))
     client = YouTubeClient()
     result = await client.upload(
-        video_path=first_video,
+        video_path=final_video_url,
         title=publishing.get("title", "VibeCast Generated Video"),
         description=publishing.get("description", ""),
         tags=publishing.get("tags", []),
         thumbnail_path=thumbnail.get("image_url", ""),
         privacy_status=os.environ.get("YOUTUBE_PRIVACY_STATUS", "private"),
     )
+    result["final_video_url"] = final_video_url
     return Event(
         output=result,
         actions=EventActions(state_delta={"upload_result": result}),
@@ -477,9 +520,9 @@ publishing_advisor = LlmAgent(
     name="publishing_advisor",
     model=MODEL,
     instruction=(
-        "You are a social media publishing strategist. Given the "
-        "video script: {script}, generated assets: {assets}, and "
-        "trend analysis: {trends}, create comprehensive publishing "
+        "You are a social media publishing strategist. Read the video "
+        "script: {script?}, generated assets: {assets?}, and trend "
+        "analysis: {trends?}, then create comprehensive publishing "
         "recommendations.\n\n"
         "Reply with a JSON object with these exact keys:\n"
         "  title (str, under 60 chars), description (str, under 5000 chars), "
@@ -488,45 +531,12 @@ publishing_advisor = LlmAgent(
         "twitter str, linkedin str, instagram str), "
         "hashtags (list of 10-15 str)\n\n"
         "- Integrate keywords naturally in the description\n"
-        "- Base upload time on platform: {intake}\n"
+        "- Base upload time on the platform specified in the creative brief: {intake?}.\n"
         "- No markdown, no explanation — pure JSON only."
     ),
     output_key="publishing",
     description="Creates publishing metadata and social media strategy.",
 )
-
-
-# ===========================================================================
-# HITL Gate — Formal script review using ADK request_input (Day 1 pattern)
-# ===========================================================================
-script_review_agent = LlmAgent(
-    name="script_review_agent",
-    model=MODEL,
-    tools=[request_input],
-    instruction=(
-        "You are the script review gatekeeper for VibeCast.\n\n"
-        "Your ONLY job is to present the script to the user and get their "
-        "approval before production begins.\n\n"
-        "1. Read the script from state: {script}\n"
-        "2. Present a clear summary: title, hook, segment count, CTA\n"
-        "3. Call the adk_request_input tool with a message asking the user "
-        "to approve or request changes\n"
-        "4. If the user approves, say 'Script approved! Proceeding to production.' "
-        "and transfer to production_pipeline_agent\n"
-        "5. If the user requests changes, note the feedback and transfer "
-        "back to the orchestrator\n\n"
-        "CRITICAL: You MUST call adk_request_input to formally pause the "
-        "workflow and wait for human approval. This creates a formal "
-        "suspension point in the workflow state."
-    ),
-    output_key="script_review_decision",
-    description=(
-        "Human-in-the-Loop gate that formally suspends the workflow "
-        "using ADK request_input until the user approves the script."
-    ),
-)
-
-
 # ===========================================================================
 # Production Workflow — Deterministic pipeline after script approval
 # ===========================================================================
@@ -566,6 +576,9 @@ class ProductionPipelineAgent(BaseAgent):
             yield event
 
 
+# ===========================================================================
+# HITL Gate — Formal script review using ADK request_input (Day 1 pattern)
+# ===========================================================================
 production_pipeline_agent = ProductionPipelineAgent(
     name="production_pipeline_agent",
     workflow=production_pipeline,
@@ -576,10 +589,46 @@ production_pipeline_agent = ProductionPipelineAgent(
     ),
 )
 
+
+# ===========================================================================
+# HITL Gate — Formal script review using ADK request_input (Day 1 pattern)
+# ===========================================================================
+script_review_agent = LlmAgent(
+    name="script_review_agent",
+    model=MODEL,
+    sub_agents=[production_pipeline_agent],
+    tools=[request_input],
+    instruction=(
+        "You are the script review gatekeeper for VibeCast.\n\n"
+        "Your ONLY job is to present the script to the user and get their "
+        "approval before production begins.\n\n"
+        "1. Read the script: {script?}\n"
+        "2. Present a clear summary: title, hook, segment count, CTA\n"
+        "3. Call the adk_request_input tool with a message asking the user "
+        "to approve or request changes\n"
+        "4. If the user approves, say 'Script approved! Proceeding to production.' "
+        "and transfer to 'production_pipeline_agent' to execute the deterministic pipeline\n"
+        "5. If the user requests changes, note the feedback and transfer "
+        "back to the orchestrator\n\n"
+        "CRITICAL: You MUST call adk_request_input to formally pause the "
+        "workflow and wait for human approval. This creates a formal "
+        "suspension point in the workflow state."
+    ),
+    output_key="script_review_decision",
+    description=(
+        "Human-in-the-Loop gate that formally suspends the workflow "
+        "using ADK request_input until the user approves the script."
+    ),
+)
+
+
+# ===========================================================================
+# Production Coordinator — Bridges HITL and deterministic pipeline
+# ===========================================================================
 production_coordinator = LlmAgent(
     name="production_coordinator",
     model=MODEL,
-    sub_agents=[script_review_agent, production_pipeline_agent],
+    sub_agents=[script_review_agent],
     instruction=(
         "You coordinate Phase 4 production for VibeCast.\n\n"
         "When the user is ready for production:\n"
@@ -611,29 +660,26 @@ root_agent = LlmAgent(
     before_tool_callback=before_tool_security_callback,
     instruction=(
         "You are VibeCast, a conversational AI video creation orchestrator "
-        "built for the Kaggle AI Agents capstone.\n\n"
+        "built for the Kaggle AI Agents capstone. You coordinate a team of "
+        "sub-agents. You MUST follow these phases in strict sequential order:\n\n"
         "PHASE 1 - INTAKE:\n"
-        "- Ask for platform, target audience, style, and duration when missing.\n"
-        "- Confirm the creative brief before proceeding.\n\n"
-        "PHASE 2 - RESEARCH AND TRENDS:\n"
-        "- Transfer to researcher for search-grounded facts and sources.\n"
-        "- Transfer to trend_analyst for search-grounded hooks, keywords, "
-        "and competitor angles.\n\n"
-        "PHASE 3 - SCRIPT REVIEW (Human-in-the-Loop):\n"
-        "- Transfer to scriptwriter_agent for the script.\n"
-        "- Present the title, hook, segment plan, CTA to the user.\n"
-        "- The production pipeline includes a formal HITL gate "
-        "(script_review_gate) that suspends the workflow state using "
-        "ADK RequestInput until the user explicitly approves.\n"
-        "- If the user requests changes, transfer back to scriptwriter_agent "
-        "with the feedback.\n\n"
-        "PHASE 4 - PRODUCTION (Deterministic Pipeline):\n"
-        "- After the user signals readiness, transfer to production_coordinator.\n"
-        "- The pipeline will formally request approval via the HITL gate, "
-        "then execute: storyboard → Veo video → Gemini TTS → Imagen thumbnail "
-        "→ subtitles → publishing metadata → private YouTube upload.\n\n"
-        "Be clear, practical, and demo-ready. Keep the user in the loop and "
-        "surface approvals before expensive generation steps."
+        "- Gather platform, target audience, style, and duration. Ask follow-up questions if missing.\n"
+        "- Formulate a creative brief and present it to the user.\n"
+        "- Once the user confirms/approves the brief (e.g. they say 'yes', 'proceed', 'looks good'), you MUST proceed to Phase 2.\n\n"
+        "PHASE 2 - RESEARCH AND TRENDS (Mandatory):\n"
+        "- Do NOT skip this phase. First, transfer control to 'researcher' to gather topic facts and sources.\n"
+        "- Once 'researcher' completes and returns, immediately transfer control to 'trend_analyst' to gather trending hooks and keywords.\n"
+        "- Once both research and trend data are populated in the state, proceed to Phase 3.\n\n"
+        "PHASE 3 - SCRIPTWRITING AND REVIEW:\n"
+        "- Transfer control to 'scriptwriter_agent' to generate the initial script.\n"
+        "- When the script is generated, present the title, hook, segments, and CTA to the user for review.\n"
+        "- If the user requests changes, transfer control back to 'scriptwriter_agent' with the feedback.\n"
+        "- Once the user approves the script (e.g., they say 'yes', 'proceed', 'looks good', 'continue'), you MUST proceed to Phase 4.\n\n"
+        "PHASE 4 - PRODUCTION:\n"
+        "- Transfer control to 'production_coordinator' to start the production pipeline.\n\n"
+        "Rules:\n"
+        "- Be a strict coordinator. Always check which phases have completed by looking at the state keys ('intake', 'research', 'trends', 'script').\n"
+        "- Never call a sub-agent out of order."
     ),
     description=(
         "Conversational VibeCast orchestrator with stateful HITL review gates."

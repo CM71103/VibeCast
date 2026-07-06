@@ -102,7 +102,7 @@ async def generate_video(
     duration: int = 5,
     aspect_ratio: str = "16:9",
 ) -> dict:
-    """Generate a video clip from a visual description using Google Veo.
+    """Generate a video clip from a visual description using json2video API.
 
     Args:
         prompt: A detailed visual description of the scene to

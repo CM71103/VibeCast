@@ -76,16 +76,14 @@ async def run_demo():
     print(f"Mock Mode: {mock_mode}")
     print(sep)
 
-    # Pre-programmed conversation for the demo
-    follow_ups = iter([
-        "Yes, the brief looks correct. Proceed with research.",
-        "Looks great! Proceed with production.",
-        "Yes, upload it.",
-    ])
-
     current_msg = initial_prompt
     turn = 0
     max_turns = 10
+
+    # Track which phase messages we have already sent to avoid repetition
+    sent_brief_confirm = False
+    sent_script_approve = False
+    sent_upload_confirm = False
 
     while turn < max_turns:
         print(f"\n--- Turn {turn + 1} ---")
@@ -131,17 +129,39 @@ async def run_demo():
             if event.actions and event.actions.end_of_agent:
                 print(f"  [end: {event.author}]")
 
-        # If the agent produced text, it's probably asking for input
-        if has_text_response:
-            try:
-                current_msg = next(follow_ups)
-            except StopIteration:
-                print("\n[No more pre-programmed responses - ending demo]")
-                break
+        # Fetch updated session state to determine the next phase message
+        session_info = await runner.session_service.get_session(
+            app_name=runner.app_name, session_id=session.id
+        )
+        state_dict = {}
+        if session_info.state:
+            if hasattr(session_info.state, "model_dump"):
+                state_dict = session_info.state.model_dump()
+            elif isinstance(session_info.state, dict):
+                state_dict = session_info.state
+
+        # Determine next user action based on current state keys
+        if "intake" in state_dict and "research" not in state_dict and not sent_brief_confirm:
+            current_msg = "Yes, the brief looks correct. Proceed with research."
+            sent_brief_confirm = True
+        elif "script" in state_dict and "assets" not in state_dict and not sent_script_approve:
+            current_msg = "Looks great! Proceed with production."
+            sent_script_approve = True
+        elif "assets" in state_dict and "upload_result" not in state_dict and not sent_upload_confirm:
+            current_msg = "Yes, upload it."
+            sent_upload_confirm = True
         else:
-            # Agent may have finished without output
-            print("[No agent response - ending]")
-            break
+            # End if we have completed all steps or no new phase is triggered
+            if sent_upload_confirm and "upload_result" in state_dict:
+                print("\n[Video creation pipeline and upload completed successfully - ending demo]")
+                break
+            elif not has_text_response:
+                print("[No agent response - ending]")
+                break
+            else:
+                # Fallback to keep conversation going if needed
+                print("\n[Waiting for further state transitions...]")
+                current_msg = "Please continue."
 
         turn += 1
 
