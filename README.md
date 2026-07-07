@@ -1,9 +1,58 @@
 # VibeCast
-
 > **Kaggle AI Agents Capstone Project — Freestyle Track**  
 > Built with Google Agent Development Kit (ADK) 2.0
 
-VibeCast is a conversational AI video creation agent that turns a creator's topic into a reviewed script, search-grounded research, production-ready storyboard, generated media assets, publishing metadata, and a private YouTube upload path — all with **stateful Human-in-the-Loop (HITL) approval gates**.
+### Authors
+- **K Ganesh Giridhar** - Idea brainstorm, pitch, orchestration, and agent building
+- **Mouli** - Agent flow and architecture
+
+## Hackathon / Capstone: Vibecoding Agents
+
+Overview
+
+The AI Agents: Intensive Vibe Coding Capstone Project challenges participants to build an AI agent that demonstrates practical value using concepts from Kaggle’s 5-Day AI Agents: Intensive Vibe Coding Course with Google. Submissions should include a Kaggle Writeup, media gallery (cover image + video), an attached public project link (live demo or public code repo), and a public video (<= 5 minutes on YouTube). Projects may enter one of four tracks: Agents for Good, Agents for Business, Concierge Agents, or Freestyle.
+
+Submission Requirements
+
+- Kaggle Writeup (<= 2,500 words) with selected Track.
+- Media Gallery with cover image and video (video <= 5 minutes, published to YouTube).
+- Public Project Link: working demo or public code repository with setup instructions.
+- Final submission must be made before the deadline; draft writeups are not considered.
+
+Tracks and Awards
+
+- Agents for Good — solutions with social impact.
+- Agents for Business — enterprise-focused solutions with business value.
+- Concierge Agents — personal assistants that prioritize security/privacy.
+- Freestyle — creative or novel agent ideas.
+
+Each track awards non-monetary Kaggle swag to top winners.
+
+Evaluation Criteria (Summary)
+
+- Category 1 — The Pitch (30 points): problem definition, value, 5-minute video clarity, and writeup quality.
+- Category 2 — The Implementation (70 points): architecture, code quality, meaningful use of agents, security, documentation (README), and demonstration of course concepts.
+
+Key Concepts to Demonstrate (at least 3 required)
+
+- Agent / Multi-agent system (show in code)
+- MCP Server (show in code)
+- Antigravity (demonstrate in video)
+- Security features (code or video)
+- Deployability (video)
+- Agent skills (Agents CLI) (code or video)
+
+Competition Rules (high level)
+
+- Register on the competition website and accept official rules. See the full rules at the competition page.
+- One submission per team for hackathon tracks; max team size is five.
+- Do not include API keys or passwords in your public submission.
+- Winners may be required to provide deliverables and licensing under CC-BY 4.0.
+
+For full official rules and legal terms, refer to the competition website: https://www.kaggle.com/competitions/vibecoding-agents-capstone-project
+
+
+VibeCast is a conversational AI video creation agent that turns a creator's topic into a reviewed script, search-grounded research, production-ready storyboard, generated media assets, publishing metadata, and a comprehensive video summary and analytics report — all with **stateful Human-in-the-Loop (HITL) approval gates**.
 
 ---
 
@@ -35,7 +84,7 @@ graph TD
     AG --> TH[Imagen Thumbnail]
     AG --> SUB[SRT Subtitles]
     AG --> PUB[Publishing Advisor]
-    PUB --> YT[Auto Publisher<br/>YouTube Private Upload]
+    PUB --> YT[Video Summarizer<br/>Publishing Package & Analytics Report]
 ```
 
 ### 5-Day Course Concept Mapping
@@ -43,7 +92,7 @@ graph TD
 | Course Day | Theme | VibeCast Implementation |
 |------------|-------|-------------------------|
 | **Day 1** | Agentic Engineering | Conversational `LlmAgent` orchestrator with **stateful HITL review gate** (`script_review_gate` using `RequestInput`) |
-| **Day 2** | Tools & Interoperability | FastMCP media tools server for Veo, Gemini TTS, Imagen, subtitles, YouTube |
+| **Day 2** | Tools & Interoperability | FastMCP media tools server for Veo, Gemini TTS, Imagen, subtitles |
 | **Day 3** | Agent Skills | `app/skills/video_production/SKILL.md` — cinematic scriptwriting guidelines |
 | **Day 4** | Security & Evaluation | Prompt sanitization, injection detection, ADK `before_tool_callback`, unit tests |
 | **Day 5** | Production Readiness | ADK web UI, config via `.env`, mock mode for demos, `run.py` scripted demo |
@@ -97,10 +146,10 @@ After explicit approval via the HITL gate, the `Workflow` executes:
 1. **Storyboard Agent** → visual prompts per scene
 2. **Asset Generator** → Veo video, Gemini TTS voiceover, Imagen thumbnail, SRT subtitles
 3. **Publishing Advisor** → title, description, tags, hashtags, social posts, best upload time
-4. **Auto Publisher** → private YouTube upload
+4. **Video Summarizer** → publishing package & analytics report
 
 ### Phase 5 — Delivery
-User receives: video URL, thumbnail, subtitles, publishing package, YouTube link.
+User receives: video URL, thumbnail, subtitles, publishing package, and analytics report.
 
 ---
 
@@ -198,11 +247,10 @@ vibecast-kaggle/
 │   ├── security/
 │   │   └── validators.py           # Sanitization, injection detection, ADK callback
 │   ├── mcp_server/
-│   │   ├── media_tools_server.py   # FastMCP tools (video, voiceover, thumbnail, subtitles, YouTube)
+│   │   ├── media_tools_server.py   # FastMCP tools (video, voiceover, thumbnail, subtitles)
 │   │   ├── veo_client.py           # Google Veo video generation
 │   │   ├── tts_client.py           # Gemini TTS voiceover
 │   │   ├── imagen_client.py        # Google Imagen thumbnails
-│   │   ├── youtube_client.py       # YouTube Data API v3 upload
 │   │   └── web_search_client.py    # Google Custom Search API
 │   └── skills/video_production/
 │       └── SKILL.md                # Cinematic scriptwriting guidelines (Day 3)
@@ -237,7 +285,7 @@ vibecast-kaggle/
 
 ## 📹 Demo Video
 
-[Watch the 5-minute demo on YouTube](https://youtu.be/YOUR_VIDEO_ID)
+[Watch the 5-minute demo on YouTube](https://www.youtube.com/watch?v=fTuPoLYmGrM)
 
 Covers:
 - Problem statement & why agents
@@ -249,7 +297,7 @@ Covers:
 
 ## 📝 Writeup
 
-See the [Kaggle Writeup](https://www.kaggle.com/competitions/vibecoding-agents-capstone-project/writeups/YOUR_WRITEUP) for:
+See the [Kaggle Writeup](https://www.kaggle.com/competitions/vibecoding-agents-capstone-project/writeups/vibecast-ai-orchestrated-conversational-video-pro) for:
 - Detailed problem/solution analysis
 - Technical architecture deep-dive
 - Key design decisions
